@@ -2,6 +2,7 @@ const webpack = require('webpack');
 const path = require('path');
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const LiveReloadPlugin = require('webpack-livereload-plugin');
 const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
 const OptimizeCssAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 
@@ -33,15 +34,8 @@ const common = {
                 test: /\.elm$/,
                 exclude: [/elm-stuff/, /node_modules/],
                 loader: 'elm-webpack-loader'
-            },
-            {
-                test: /\.(scss|css)$/,
-                use: [
-                    MiniCssExtractPlugin.loader,
-                    'css-loader',
-                    'sass-loader'
-                ]
             }
+
         ]
     },
     plugins: [
@@ -59,10 +53,20 @@ const dev = {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js'
     },
+    module: {
+        rules: [
+            {
+                test: /\.(scss|css)$/,
+                use: [
+                    'style-loader',
+                    'css-loader',
+                    'sass-loader'
+                ]
+            }
+        ]
+    },
     plugins: [
-        new MiniCssExtractPlugin({
-            filename: "[name].css",
-        })
+        new LiveReloadPlugin({appendScriptTag: true, protocol: 'http', hostname: 'localhost'})
     ]
 };
 
@@ -73,6 +77,18 @@ const prod = {
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[hash].js'
+    },
+    module: {
+      rules: [
+          {
+              test: /\.(scss|css)$/,
+              use: [
+                  MiniCssExtractPlugin.loader,
+                  'css-loader',
+                  'sass-loader'
+              ]
+          }
+      ]
     },
     plugins: [
         new MiniCssExtractPlugin({

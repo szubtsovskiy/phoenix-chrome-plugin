@@ -2,6 +2,9 @@ module Main exposing (main)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (onClick)
+import Json.Encode as Json
+import Phoenix
 
 
 {-| Union type to handle string entered by user
@@ -11,7 +14,7 @@ import Html.Attributes exposing (..)
 
 -}
 type StringInput
-  = Acceptable String
+  = Candidate String
   | Malformed String (Maybe String)
 
 
@@ -24,17 +27,29 @@ type StringInput
 -}
 type State
   = Disconnected (Maybe StringInput) (Maybe String)
+  | Connecting String (Maybe String)
   | Connected String (Maybe String)
+  | Joining String String
   | Joined String String
+
+
+type Message
+  = Incoming Json.Value
+  | Outgoing String
+
+
+type Msg
+  = ConnectAndJoin
+  | Send
+  | OnConnected String
+  | OnJoined String
+  | OnMessage String Json.Value
 
 
 type alias Model =
   { state : State
+  , frames : List Message
   }
-
-
-type Msg
-  = NoOp
 
 
 main : Program Never Model Msg
@@ -44,22 +59,90 @@ main =
 
 init : ( Model, Cmd Msg )
 init =
-  { state = Disconnected Nothing Nothing } ! []
+  { state = Disconnected (Just (Candidate "ws://localhost:4000/ws")) (Just "larder:1"), frames = [] } ! []
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-  model ! []
+  case msg of
+    ConnectAndJoin ->
+      case model.state of
+        Disconnected (Just (Candidate candidate)) maybeChannel ->
+          case validateUrl candidate of
+            Ok url ->
+              { model | state = Connecting url maybeChannel } ! [ Phoenix.connect url ]
+
+            Err err ->
+              { model | state = Disconnected (Just <| Malformed candidate <| Just err) maybeChannel } ! []
+
+        _ ->
+          model ! []
+
+    Send ->
+      case model.state of
+        Joined _ _ ->
+          let
+            message =
+              """{"project-item": {"name": "An item", "project-id": 3}}"""
+          in
+          { model | frames = Outgoing message :: model.frames } ! [ Phoenix.send ( "create", message ) ]
+
+        _ ->
+          model ! []
+
+    OnConnected _ ->
+      case model.state of
+        Connecting url (Just topic) ->
+          let
+            _ =
+              Debug.log "Connected" url
+          in
+          { model | state = Joining url topic } ! [ Phoenix.join topic ]
+
+        _ ->
+          model ! []
+
+    OnJoined topic ->
+      case model.state of
+        Joining url topic ->
+          let
+            _ =
+              Debug.log "Joined" topic
+          in
+          { model | state = Joined url topic } ! []
+
+        _ ->
+          model ! []
+
+    OnMessage event payload ->
+      if String.startsWith "phx_" event || String.startsWith "chan_reply_" event then
+        model ! []
+
+      else
+        { model | frames = Incoming payload :: model.frames } ! []
 
 
 view : Model -> Html Msg
 view model =
+  let
+    frameView message =
+      case message of
+        Incoming data ->
+          div [ class "frame" ]
+            [ text (Json.encode 0 data)
+            ]
+
+        Outgoing data ->
+          div [ class "frame" ]
+            [ text data
+            ]
+  in
   div [ class "container d-flex flex-column" ]
     [ div [ class "form-inline justify-content-between" ]
-        [ input [ class "form-control mr-2", type_ "text", placeholder "URL" ] []
-        , input [ class "form-control mr-2", type_ "text", placeholder "Topic" ] []
+        [ input [ class "form-control mr-2 fg-2", type_ "text", placeholder "URL" ] []
+        , input [ class "form-control mr-2 fg-1", type_ "text", placeholder "Topic" ] []
         , div [ class "d-flex fixed-width" ]
-            [ button [ class "btn btn-primary", type_ "button" ]
+            [ button [ class "btn btn-primary", type_ "button", onClick ConnectAndJoin ]
                 [ text "Connect & Join" ]
             , button [ class "btn btn-primary dropdown-toggle dropdown-toggle-split", attribute "data-toggle" "dropdown", type_ "button" ]
                 []
@@ -69,14 +152,17 @@ view model =
                 ]
             ]
         ]
-    , div [ class "row no-gutters mt-4 d-flex" ]
-        [ input [ class "form-control mr-2", type_ "text", placeholder "Message" ] []
-        , button [ class "btn btn-primary fixed-width", type_ "button" ] [ text "Send" ]
+    , div [ class "row no-gutters mt-4 d-flex flex-row" ]
+        [ div [ class "input-group mr-2" ]
+            [ input [ class "form-control fg-1", type_ "text", placeholder "Event" ] []
+            , input [ class "form-control fg-5", type_ "text", placeholder "Message" ] []
+            ]
+        , button [ class "btn btn-primary fixed-width", type_ "button", onClick Send ] [ text "Send" ]
         ]
     , div [ class "row no-gutters mt-4 d-flex flex-row" ]
         [ div [ class "card fg-2 mr-2 fixed-height" ]
             [ div [ class "card-header" ] [ text "Frames" ]
-            , div [ class "card-body" ] []
+            , div [ class "card-body p-0" ] (List.reverse <| List.map frameView model.frames)
             ]
         , div [ class "card fg-1 fixed-height" ]
             [ div [ class "card-header" ] [ text "Preview" ]
@@ -90,4 +176,17 @@ view model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.none
+  Sub.batch
+    [ Phoenix.connected OnConnected
+    , Phoenix.joined OnJoined
+    , Phoenix.onMessage OnMessage
+    ]
+
+
+validateUrl : String -> Result String String
+validateUrl candidate =
+  if String.startsWith "ws://" candidate || String.startsWith "wss://" candidate then
+    Ok candidate
+
+  else
+    Err "URL must start with ws:// or ws://"

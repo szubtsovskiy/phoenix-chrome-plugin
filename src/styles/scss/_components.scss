@@ -1,0 +1,7 @@
+@import "~bootstrap/scss/utilities/spacing";
+
+
+.frame {
+  @extend .px-2;
+  border-bottom: 1px $gray-200 solid;
+}

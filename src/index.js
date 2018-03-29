@@ -8,5 +8,10 @@ function app() {
 }
 
 (function(){
-    document.body.appendChild(app());
+    const script = document.body.querySelector('script');
+    if (script) {
+        document.body.insertBefore(app(), script);
+    } else {
+        document.body.appendChild(app());
+    }
 })();

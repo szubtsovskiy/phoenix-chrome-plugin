@@ -34,8 +34,8 @@ type State
 
 
 type Message
-  = Incoming Json.Value
-  | Outgoing String
+  = In String Json.Value
+  | Out String String
 
 
 type Msg
@@ -82,10 +82,10 @@ update msg model =
       case model.state of
         Joined _ _ ->
           let
-            message =
-              """{"project-item": {"name": "An item", "project-id": 3}}"""
+            ( event, message ) =
+              ( "create", """{"project-item": {"name": "An item", "project-id": 3}}""" )
           in
-          { model | frames = Outgoing message :: model.frames } ! [ Phoenix.send ( "create", message ) ]
+          { model | frames = Out event message :: model.frames } ! [ Phoenix.send ( event, message ) ]
 
         _ ->
           model ! []
@@ -115,27 +115,31 @@ update msg model =
           model ! []
 
     OnMessage event payload ->
-      if String.startsWith "phx_" event || String.startsWith "chan_reply_" event then
-        model ! []
+      if not <| String.startsWith "chan_reply_" event then
+        { model | frames = In event payload :: model.frames } ! []
 
       else
-        { model | frames = Incoming payload :: model.frames } ! []
+        model ! []
 
 
 view : Model -> Html Msg
 view model =
   let
     frameView message =
-      case message of
-        Incoming data ->
-          div [ class "frame" ]
-            [ text (Json.encode 0 data)
-            ]
+      let
+        ( event, data, mod ) =
+          case message of
+            In event data ->
+              ( event, Json.encode 0 data, "frame-in" )
 
-        Outgoing data ->
-          div [ class "frame" ]
-            [ text data
-            ]
+            Out event data ->
+              ( event, data, "frame-out" )
+      in
+      div [ class ("frame " ++ mod) ]
+        [ div [ class "frame-icon" ] []
+        , div [ class "frame-event" ] [ text event ]
+        , div [ class "frame-data" ] [ text data ]
+        ]
   in
   div [ class "container d-flex flex-column" ]
     [ div [ class "form-inline justify-content-between" ]

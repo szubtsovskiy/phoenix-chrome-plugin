@@ -1,7 +1,43 @@
+$fa-font-path: "~font-awesome/fonts";
+
 @import "~bootstrap/scss/utilities/spacing";
+@import "~bootstrap/scss/utilities/flex";
+@import "~font-awesome/scss/font-awesome";
 
 
 .frame {
-  @extend .px-2;
+  @extend .d-flex, .flex-row;
+  cursor: pointer;
   border-bottom: 1px $gray-200 solid;
+
+  &.frame-in {
+    background: lighten($green, 55%);
+    .frame-icon {
+      @extend .fa, .fa-arrow-circle-o-down, .fa-fw;
+      color: $green;
+    }
+  }
+
+  &.frame-out {
+    .frame-icon {
+      @extend .fa, .fa-arrow-circle-o-up, .fa-fw;
+    }
+  }
+
+  .frame-icon {
+    @extend .px-1;
+    margin: auto 0;
+  }
+
+  .frame-event {
+    @extend .pl-1, .pr-2;
+    width: 120px;
+    border-right: 1px $gray-200 solid;
+    overflow: auto;
+  }
+
+  .frame-data {
+    @extend .px-2;
+    overflow: auto;
+  }
 }

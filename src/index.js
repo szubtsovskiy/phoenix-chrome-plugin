@@ -1,6 +1,9 @@
 import "./styles/scss/index.scss";
 import {Main} from './elm/Main.elm';
 import {Socket} from "./vendor/phoenix";
+import JSONFormatter from 'json-formatter-js';
+import 'arrive';
+
 
 function app() {
     let ws;
@@ -16,7 +19,7 @@ function app() {
     });
     app.ports.join.subscribe(topic => {
         let channel = ws.channel(topic);
-        channel.onMessage = (event, payload, ref) => {
+        channel.onMessage = (event, payload) => {
             app.ports.messages.send([event, payload]);
             return payload;
         };
@@ -40,6 +43,28 @@ function app() {
             .receive("error", () => {
 
             });
+    });
+    app.ports.previews.subscribe(({containerID, data}) => {
+        document.arrive(`#${containerID}`, {onlyOnce: true, existing: true}, container => {
+            const preview = (function() {
+                switch (typeof data) {
+                    case 'object':
+                        return new JSONFormatter(data, Infinity).render();
+                    case 'string':
+                        try {
+                            return new JSONFormatter(JSON.parse(data), Infinity).render();
+                        } catch (_) {
+                            return document.createTextNode(data);
+                        }
+                    default:
+                        return document.createTextNode("");
+
+                }
+            })();
+
+            container.innerHTML = '';
+            container.appendChild(preview);
+        });
     });
     return root;
 }

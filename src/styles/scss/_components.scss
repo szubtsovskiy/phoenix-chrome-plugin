@@ -44,3 +44,8 @@ $fa-font-path: "~font-awesome/fonts";
     text-overflow: ellipsis;
   }
 }
+
+.message-preview {
+  @extend .px-2, .py-1, .d-flex;
+  overflow: auto;
+}

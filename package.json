@@ -37,7 +37,9 @@
     "webpack-merge": "^4.1.2"
   },
   "dependencies": {
+    "arrive": "^2.4.1",
     "bootstrap": "^4.0.0",
+    "json-formatter-js": "^2.2.0",
     "npm": "^5.8.0"
   }
 }

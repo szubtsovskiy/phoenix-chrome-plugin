@@ -5,6 +5,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
 import Json.Encode as Json
 import Phoenix
+import Preview
 
 
 {-| Union type to handle string entered by user
@@ -41,6 +42,7 @@ type Message
 type Msg
   = ConnectAndJoin
   | Send
+  | SelectFrame Message
   | OnConnected String
   | OnJoined String
   | OnMessage String Json.Value
@@ -90,6 +92,14 @@ update msg model =
         _ ->
           model ! []
 
+    SelectFrame message ->
+      case message of
+        In _ data ->
+          model ! [ Preview.show previewContainerID data ]
+
+        Out _ data ->
+          model ! [ Preview.show previewContainerID (Json.string data) ]
+
     OnConnected _ ->
       case model.state of
         Connecting url (Just topic) ->
@@ -135,7 +145,7 @@ view model =
             Out event data ->
               ( event, data, "frame-out" )
       in
-      div [ class ("frame " ++ mod) ]
+      div [ class ("frame " ++ mod), onClick (SelectFrame message) ]
         [ div [ class "frame-event" ]
             [ div [ class "frame-icon" ] []
             , text event
@@ -177,7 +187,7 @@ view model =
         , div [ class "col-4" ]
             [ div [ class "card fg-1 fixed-height" ]
                 [ div [ class "card-header" ] [ text "Preview" ]
-                , div [ class "card-body p-0 d-flex" ]
+                , div [ id previewContainerID, class "card-body message-preview" ]
                     [ div [ class "fully-centered" ] [ text "Nothing selected" ]
                     ]
                 ]
@@ -193,6 +203,11 @@ subscriptions model =
     , Phoenix.joined OnJoined
     , Phoenix.onMessage OnMessage
     ]
+
+
+previewContainerID : String
+previewContainerID =
+  "message-preview"
 
 
 validateUrl : String -> Result String String

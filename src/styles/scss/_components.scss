@@ -11,7 +11,7 @@ $fa-font-path: "~font-awesome/fonts";
   border-bottom: 1px $gray-200 solid;
 
   &.frame-in {
-    background: lighten($green, 55%);
+    background: transparentize($green, 0.9);
     .frame-icon {
       @extend .fa, .fa-arrow-circle-down, .fa-fw;
       color: $green;
@@ -22,6 +22,10 @@ $fa-font-path: "~font-awesome/fonts";
     .frame-icon {
       @extend .fa, .fa-arrow-circle-up, .fa-fw;
     }
+  }
+
+  &.frame-selected {
+    background: transparentize($blue, 0.6);
   }
 
   .frame-icon {
@@ -42,6 +46,7 @@ $fa-font-path: "~font-awesome/fonts";
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    user-select: none;
   }
 }
 

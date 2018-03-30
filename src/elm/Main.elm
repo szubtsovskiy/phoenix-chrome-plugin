@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
@@ -35,14 +36,21 @@ type State
 
 
 type Message
-  = In String Json.Value
-  | Out String String
+  = In Json.Value
+  | Out String
+
+
+type alias Frame =
+  { event : String
+  , message : Message
+  , selected : Bool
+  }
 
 
 type Msg
   = ConnectAndJoin
   | Send
-  | SelectFrame Message
+  | ToggleFrameSelection Int
   | OnConnected String
   | OnJoined String
   | OnMessage String Json.Value
@@ -50,7 +58,8 @@ type Msg
 
 type alias Model =
   { state : State
-  , frames : List Message
+  , frames : Dict Int Frame
+  , nextFrameID : Int
   }
 
 
@@ -61,7 +70,14 @@ main =
 
 init : ( Model, Cmd Msg )
 init =
-  { state = Disconnected (Just (Candidate "ws://localhost:4000/ws")) (Just "larder:1"), frames = [] } ! []
+  let
+    model =
+      { state = Disconnected (Just (Candidate "ws://localhost:4000/ws")) (Just "larder:1")
+      , frames = Dict.empty
+      , nextFrameID = 0
+      }
+  in
+  model ! [ Preview.show previewContainerID Json.null ]
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -86,19 +102,40 @@ update msg model =
           let
             ( event, message ) =
               ( "create", """{"project-item": {"name": "An item", "project-id": 3}}""" )
+
+            frameID =
+              model.nextFrameID
+
+            newFrames =
+              Dict.insert frameID (Frame event (Out message) False) model.frames
           in
-          { model | frames = Out event message :: model.frames } ! [ Phoenix.send ( event, message ) ]
+          { model | frames = newFrames, nextFrameID = frameID + 1 } ! [ Phoenix.send ( event, message ) ]
 
         _ ->
           model ! []
 
-    SelectFrame message ->
-      case message of
-        In _ data ->
-          model ! [ Preview.show previewContainerID data ]
+    ToggleFrameSelection id ->
+      let
+        toggleFrameSelection toggleID currentID frame ( frames, dataToPreview ) =
+          if toggleID == currentID then
+            if frame.selected then
+              ( Dict.insert currentID { frame | selected = False } frames, Json.null )
 
-        Out _ data ->
-          model ! [ Preview.show previewContainerID (Json.string data) ]
+            else
+              case frame.message of
+                In data ->
+                  ( Dict.insert currentID { frame | selected = True } frames, data )
+
+                Out data ->
+                  ( Dict.insert currentID { frame | selected = True } frames, Json.string data )
+
+          else
+            ( Dict.insert currentID { frame | selected = False } frames, dataToPreview )
+
+        ( newFrames, dataToPreview ) =
+          Dict.foldr (toggleFrameSelection id) ( Dict.empty, Json.null ) model.frames
+      in
+      { model | frames = newFrames } ! [ Preview.show previewContainerID dataToPreview ]
 
     OnConnected _ ->
       case model.state of
@@ -126,7 +163,14 @@ update msg model =
 
     OnMessage event payload ->
       if not <| String.startsWith "chan_reply_" event then
-        { model | frames = In event payload :: model.frames } ! []
+        let
+          frameID =
+            model.nextFrameID
+
+          newFrames =
+            Dict.insert frameID (Frame event (In payload) False) model.frames
+        in
+        { model | frames = newFrames, nextFrameID = frameID + 1 } ! []
 
       else
         model ! []
@@ -135,23 +179,32 @@ update msg model =
 view : Model -> Html Msg
 view model =
   let
-    frameView message =
+    frameView id frame frameViews =
       let
-        ( event, data, mod ) =
-          case message of
-            In event data ->
-              ( event, Json.encode 0 data, "frame-in" )
+        ( data, mod ) =
+          case frame.message of
+            In data ->
+              ( Json.encode 0 data, "frame-in" )
 
-            Out event data ->
-              ( event, data, "frame-out" )
-      in
-      div [ class ("frame " ++ mod), onClick (SelectFrame message) ]
-        [ div [ class "frame-event" ]
-            [ div [ class "frame-icon" ] []
-            , text event
+            Out data ->
+              ( data, "frame-out" )
+
+        classes =
+          [ ( "frame", True )
+          , ( mod, True )
+          , ( "frame-selected", frame.selected )
+          ]
+
+        frameView =
+          div [ classList classes, onClick (ToggleFrameSelection id) ]
+            [ div [ class "frame-event" ]
+                [ div [ class "frame-icon" ] []
+                , text frame.event
+                ]
+            , div [ class "frame-data" ] [ text data ]
             ]
-        , div [ class "frame-data" ] [ text data ]
-        ]
+      in
+      frameView :: frameViews
   in
   div [ class "container d-flex flex-column" ]
     [ div [ class "form-inline justify-content-between" ]
@@ -181,15 +234,14 @@ view model =
         [ div [ class "col-8 pr-2" ]
             [ div [ class "card fixed-height" ]
                 [ div [ class "card-header" ] [ text "Frames" ]
-                , div [ class "card-body p-0" ] (List.reverse <| List.map frameView model.frames)
+                , div [ class "card-body p-0" ] (Dict.foldr frameView [] model.frames)
                 ]
             ]
         , div [ class "col-4" ]
             [ div [ class "card fg-1 fixed-height" ]
                 [ div [ class "card-header" ] [ text "Preview" ]
                 , div [ id previewContainerID, class "card-body message-preview" ]
-                    [ div [ class "fully-centered" ] [ text "Nothing selected" ]
-                    ]
+                    []
                 ]
             ]
         ]

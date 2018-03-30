@@ -47,18 +47,19 @@ function app() {
     app.ports.previews.subscribe(({containerID, data}) => {
         document.arrive(`#${containerID}`, {onlyOnce: true, existing: true}, container => {
             const preview = (function() {
-                switch (typeof data) {
-                    case 'object':
-                        return new JSONFormatter(data, Infinity).render();
-                    case 'string':
-                        try {
-                            return new JSONFormatter(JSON.parse(data), Infinity).render();
-                        } catch (_) {
-                            return document.createTextNode(data);
-                        }
-                    default:
-                        return document.createTextNode("");
-
+                if (data == null || (typeof data !== 'object' && typeof data !== 'string')) {
+                    const preview = document.createElement('div');
+                    preview.className = 'fully-centered';
+                    preview.appendChild(document.createTextNode('Nothing to show'));
+                    return preview;
+                } else if (typeof data === 'object') {
+                    return new JSONFormatter(data, Infinity).render();
+                } else {
+                    try {
+                        return new JSONFormatter(JSON.parse(data), Infinity).render();
+                    } catch (_) {
+                        return document.createTextNode(data);
+                    }
                 }
             })();
 

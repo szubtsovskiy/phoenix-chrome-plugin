@@ -67,6 +67,20 @@ function app() {
             container.appendChild(preview);
         });
     });
+    app.ports.copy.subscribe(message => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.style.width = '10px';
+        input.style.height = '10px';
+        input.style.position = 'absolute';
+        input.style.left = '-100px';
+        document.body.appendChild(input);
+        input.value = message;
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+
+    });
     return root;
 }
 

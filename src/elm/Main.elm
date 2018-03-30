@@ -1,12 +1,16 @@
 module Main exposing (main)
 
+import Clipboard
 import Dict exposing (Dict)
+import Dom.Scroll as Scroll
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onWithOptions)
+import Json.Decode
 import Json.Encode as Json
 import Phoenix
 import Preview
+import Task
 
 
 {-| Union type to handle string entered by user
@@ -48,9 +52,11 @@ type alias Frame =
 
 
 type Msg
-  = ConnectAndJoin
-  | Send
+  = NoOp
+  | ConnectAndJoin
+  | Send String String
   | ToggleFrameSelection Int
+  | CopyToClipboard String
   | OnConnected String
   | OnJoined String
   | OnMessage String Json.Value
@@ -83,6 +89,9 @@ init =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
+    NoOp ->
+      model ! []
+
     ConnectAndJoin ->
       case model.state of
         Disconnected (Just (Candidate candidate)) maybeChannel ->
@@ -96,13 +105,10 @@ update msg model =
         _ ->
           model ! []
 
-    Send ->
+    Send event message ->
       case model.state of
         Joined _ _ ->
           let
-            ( event, message ) =
-              ( "create", """{"project-item": {"name": "An item", "project-id": 3}}""" )
-
             frameID =
               model.nextFrameID
 
@@ -113,6 +119,9 @@ update msg model =
 
         _ ->
           model ! []
+
+    CopyToClipboard message ->
+      model ! [ Clipboard.copy message ]
 
     ToggleFrameSelection id ->
       let
@@ -169,8 +178,11 @@ update msg model =
 
           newFrames =
             Dict.insert frameID (Frame event (In payload) False) model.frames
+
+          scroll =
+            Task.attempt (always NoOp) (Scroll.toBottom framesContainerID)
         in
-        { model | frames = newFrames, nextFrameID = frameID + 1 } ! []
+        { model | frames = newFrames, nextFrameID = frameID + 1 } ! [ scroll ]
 
       else
         model ! []
@@ -195,6 +207,9 @@ view model =
           , ( "frame-selected", frame.selected )
           ]
 
+        onClickNoPropagation =
+          onWithOptions "click" { stopPropagation = True, preventDefault = False } << Json.Decode.succeed
+
         frameView =
           div [ classList classes, onClick (ToggleFrameSelection id) ]
             [ div [ class "frame-event" ]
@@ -202,6 +217,12 @@ view model =
                 , text frame.event
                 ]
             , div [ class "frame-data" ] [ text data ]
+            , div [ class "frame-actions" ]
+                [ button [ class "btn btn-xs btn-secondary frame-repeat", type_ "button", onClickNoPropagation (Send frame.event data) ]
+                    []
+                , button [ class "btn btn-xs btn-secondary frame-copy", type_ "button", onClickNoPropagation (CopyToClipboard data) ]
+                    []
+                ]
             ]
       in
       frameView :: frameViews
@@ -227,14 +248,14 @@ view model =
                 [ input [ class "form-control col-3", type_ "text", placeholder "Event" ] []
                 , input [ class "form-control col-9", type_ "text", placeholder "Message" ] []
                 ]
-            , button [ class "btn btn-primary fw-150", type_ "button", onClick Send ] [ text "Send" ]
+            , button [ class "btn btn-primary fw-150", type_ "button", onClick (Send "create" """{"project-item": {"name": "An item", "project-id": 3}}""") ] [ text "Send" ]
             ]
         ]
     , div [ class "row no-gutters mt-4" ]
         [ div [ class "col-8 pr-2" ]
             [ div [ class "card fixed-height" ]
                 [ div [ class "card-header" ] [ text "Frames" ]
-                , div [ class "card-body p-0" ] (Dict.foldr frameView [] model.frames)
+                , div [ id framesContainerID, class "card-body p-0 frames" ] (Dict.foldr frameView [] model.frames)
                 ]
             ]
         , div [ class "col-4" ]
@@ -255,6 +276,11 @@ subscriptions model =
     , Phoenix.joined OnJoined
     , Phoenix.onMessage OnMessage
     ]
+
+
+framesContainerID : String
+framesContainerID =
+  "frames"
 
 
 previewContainerID : String

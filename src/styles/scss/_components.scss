@@ -2,13 +2,55 @@ $fa-font-path: "~font-awesome/fonts";
 
 @import "~bootstrap/scss/utilities/spacing";
 @import "~bootstrap/scss/utilities/flex";
+@import "~bootstrap/scss/mixins/buttons";
 @import "~font-awesome/scss/font-awesome";
 
+.btn-xs {
+  display: inline-flex;
+  @include button-size(.2rem, .25rem, .875rem, 0.75, $btn-border-radius-sm);
+  height: 22px;
+  width: 22px;
+}
+
+.frames {
+  overflow: auto;
+}
 
 .frame {
   @extend .row, .no-gutters;
   cursor: pointer;
   border-bottom: 1px $gray-200 solid;
+  position: relative;
+
+  .frame-actions {
+    display: none;
+  }
+
+  &:hover {
+    background: transparentize($blue, 0.8) !important;
+    &.frame-in {
+      .frame-repeat {
+        display: none;
+      }
+    }
+    .frame-actions {
+      display: inline-flex;
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      z-index: $zindex-dropdown;
+      .frame-repeat {
+        @extend .fa, .fa-repeat;
+      }
+      .frame-copy {
+        @extend .fa, .fa-copy;
+      }
+    }
+    .frame-data {
+      width: calc(100% - 180px);
+    }
+  }
 
   &.frame-in {
     background: transparentize($green, 0.9);

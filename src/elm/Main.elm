@@ -8,6 +8,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onWithOptions)
 import Json.Decode
 import Json.Encode as Json
+import Octicons
 import Phoenix
 import Preview
 import Task
@@ -218,10 +219,10 @@ view model =
                 ]
             , div [ class "frame-data" ] [ text data ]
             , div [ class "frame-actions" ]
-                [ button [ class "btn btn-xs btn-secondary frame-repeat", type_ "button", onClickNoPropagation (Send frame.event data) ]
+                [ button [ class "btn btn-xs btn-secondary frame-repeat", type_ "button", title "Send again", onClickNoPropagation (Send frame.event data) ]
                     []
-                , button [ class "btn btn-xs btn-secondary frame-copy", type_ "button", onClickNoPropagation (CopyToClipboard data) ]
-                    []
+                , button [ class "btn btn-xs btn-secondary frame-copy", type_ "button", title "Copy to clipboard", onClickNoPropagation (CopyToClipboard data) ]
+                    [ Octicons.clippy ]
                 ]
             ]
       in

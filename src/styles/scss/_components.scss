@@ -43,9 +43,6 @@ $fa-font-path: "~font-awesome/fonts";
       .frame-repeat {
         @extend .fa, .fa-repeat;
       }
-      .frame-copy {
-        @extend .fa, .fa-copy;
-      }
     }
     .frame-data {
       width: calc(100% - 180px);

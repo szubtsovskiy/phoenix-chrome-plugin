@@ -7,6 +7,7 @@ import 'arrive';
 
 function app() {
     let ws;
+    let channel;
     const root = document.createElement('div');
     const app = Main.embed(root);
     app.ports.connect.subscribe(url => {
@@ -18,31 +19,31 @@ function app() {
         ws.connect();
     });
     app.ports.join.subscribe(topic => {
-        let channel = ws.channel(topic);
+        channel = ws.channel(topic);
         channel.onMessage = (event, payload) => {
-            app.ports.messages.send([event, payload]);
+            app.ports.messages.send([event, payload || null]);
             return payload;
         };
         channel.join()
             .receive("ok", () => {
                 app.ports.joins.send(topic);
-                app.ports.send.subscribe(([event, payload]) => {
-                    let pushPayload;
-                    try {
-                        pushPayload = JSON.parse(payload);
-                    } catch (e) {
-                        if (e instanceof SyntaxError) {
-                            pushPayload = payload;
-                        } else {
-                            throw e;
-                        }
-                    }
-                    channel.push(event, pushPayload);
-                })
             })
             .receive("error", () => {
 
             });
+    });
+    app.ports.send.subscribe(([event, payload]) => {
+        let pushPayload;
+        try {
+            pushPayload = JSON.parse(payload);
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                pushPayload = payload;
+            } else {
+                throw e;
+            }
+        }
+        channel.push(event, pushPayload);
     });
     app.ports.previews.subscribe(({containerID, data}) => {
         document.arrive(`#${containerID}`, {onlyOnce: true, existing: true}, container => {

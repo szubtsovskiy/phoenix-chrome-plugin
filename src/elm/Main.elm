@@ -197,7 +197,11 @@ view model =
         ( data, mod ) =
           case frame.message of
             In data ->
-              ( Json.encode 0 data, "frame-in" )
+              if data == Json.null then
+                ( "", "frame-in" )
+
+              else
+                ( Json.encode 0 data, "frame-in" )
 
             Out data ->
               ( data, "frame-out" )

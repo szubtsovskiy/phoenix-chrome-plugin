@@ -5,24 +5,13 @@ import Dict exposing (Dict)
 import Dom.Scroll as Scroll
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onWithOptions)
+import Html.Events exposing (onClick, onInput, onWithOptions)
 import Json.Decode
 import Json.Encode as Json
 import Octicons
 import Phoenix
 import Preview
 import Task
-
-
-{-| Union type to handle string entered by user
-
-      Acceptable <value> - a value which has not been validated or valid value
-      Malformed <value> <error> - an invalid value together with optional error message
-
--}
-type StringInput
-  = Candidate String
-  | Malformed String (Maybe String)
 
 
 {-| Union type to handle connection state
@@ -32,12 +21,10 @@ type StringInput
       Joined <url> <topic> - WS client is connected and joined to a channel
 
 -}
-type State
-  = Disconnected (Maybe StringInput) (Maybe String)
-  | Connecting String (Maybe String)
-  | Connected String (Maybe String)
-  | Joining String String
-  | Joined String String
+type PhoenixConnectionState
+  = Disconnected
+  | Connecting
+  | Connected
 
 
 type Message
@@ -54,17 +41,26 @@ type alias Frame =
 
 type Msg
   = NoOp
-  | ConnectAndJoin
+  | ChangeUrl String
+  | ChangeTopic String
+  | ChangeEvent String
+  | ChangeMessage String
+  | Connect
+  | Disconnect
   | Send String String
   | ToggleFrameSelection Int
   | CopyToClipboard String
-  | OnConnected String
-  | OnJoined String
-  | OnMessage String Json.Value
+  | OnConnection (Maybe String)
+  | OnMessage ( String, Json.Value )
 
 
 type alias Model =
-  { state : State
+  { state : PhoenixConnectionState
+  , url : String
+  , topic : String
+  , event : String
+  , message : String
+  , error : Maybe String
   , frames : Dict Int Frame
   , nextFrameID : Int
   }
@@ -79,7 +75,12 @@ init : ( Model, Cmd Msg )
 init =
   let
     model =
-      { state = Disconnected (Just (Candidate "ws://localhost:4000/ws")) (Just "larder:1")
+      { state = Disconnected
+      , url = ""
+      , topic = ""
+      , event = ""
+      , message = ""
+      , error = Nothing
       , frames = Dict.empty
       , nextFrameID = 0
       }
@@ -93,33 +94,46 @@ update msg model =
     NoOp ->
       model ! []
 
-    ConnectAndJoin ->
-      case model.state of
-        Disconnected (Just (Candidate candidate)) maybeChannel ->
-          case validateUrl candidate of
-            Ok url ->
-              { model | state = Connecting url maybeChannel } ! [ Phoenix.connect url ]
+    ChangeUrl url ->
+      { model | url = url, error = Nothing } ! []
 
-            Err err ->
-              { model | state = Disconnected (Just <| Malformed candidate <| Just err) maybeChannel } ! []
+    ChangeTopic topic ->
+      { model | topic = topic } ! []
 
-        _ ->
-          model ! []
+    Connect ->
+      case validateUrl model.url of
+        Ok url ->
+          if isNotBlank model.topic then
+            { model | state = Connecting, error = Nothing } ! [ Phoenix.connect ( url, model.topic ) ]
+
+          else
+            { model | error = Nothing } ! []
+
+        Err err ->
+          { model | state = Disconnected, error = Just err } ! []
+
+    Disconnect ->
+      { model | state = Disconnected } ! [ Phoenix.disconnect () ]
+
+    ChangeEvent event ->
+      { model | event = event } ! []
+
+    ChangeMessage message ->
+      { model | message = message } ! []
 
     Send event message ->
-      case model.state of
-        Joined _ _ ->
-          let
-            frameID =
-              model.nextFrameID
+      if isNotBlank event && isNotBlank message then
+        let
+          frameID =
+            model.nextFrameID
 
-            newFrames =
-              Dict.insert frameID (Frame event (Out message) False) model.frames
-          in
-          { model | frames = newFrames, nextFrameID = frameID + 1 } ! [ Phoenix.send ( event, message ) ]
+          newFrames =
+            Dict.insert frameID (Frame event (Out message) False) model.frames
+        in
+        { model | frames = newFrames, nextFrameID = frameID + 1 } ! [ Phoenix.send ( event, message ) ]
 
-        _ ->
-          model ! []
+      else
+        model ! []
 
     CopyToClipboard message ->
       model ! [ Clipboard.copy message ]
@@ -147,31 +161,15 @@ update msg model =
       in
       { model | frames = newFrames } ! [ Preview.show previewContainerID dataToPreview ]
 
-    OnConnected _ ->
-      case model.state of
-        Connecting url (Just topic) ->
-          let
-            _ =
-              Debug.log "Connected" url
-          in
-          { model | state = Joining url topic } ! [ Phoenix.join topic ]
+    OnConnection maybeError ->
+      case maybeError of
+        Nothing ->
+          { model | state = Connected, error = Nothing } ! []
 
-        _ ->
-          model ! []
+        Just err ->
+          { model | state = Disconnected, error = Just err } ! []
 
-    OnJoined topic ->
-      case model.state of
-        Joining url topic ->
-          let
-            _ =
-              Debug.log "Joined" topic
-          in
-          { model | state = Joined url topic } ! []
-
-        _ ->
-          model ! []
-
-    OnMessage event payload ->
+    OnMessage ( event, payload ) ->
       if not <| String.startsWith "chan_reply_" event then
         let
           frameID =
@@ -192,6 +190,24 @@ update msg model =
 view : Model -> Html Msg
 view model =
   let
+    urlStateClass =
+      Maybe.map (always "is-invalid") model.error
+        |> Maybe.withDefault ""
+
+    ( connectButtonClass, connectButtonText, connectButtonMsg, connectButtonEnabled ) =
+      case model.state of
+        Disconnected ->
+          ( "btn-primary", "Connect & Join", Connect, isNotBlank model.url && isNotBlank model.topic )
+
+        Connecting ->
+          ( "btn-primary", "Connect & Join", NoOp, False )
+
+        Connected ->
+          ( "btn-warning", "Leave & Disconnect", Disconnect, True )
+
+    sendButtonEnabled =
+      model.state == Connected && isNotBlank model.event && isNotBlank model.message
+
     frameView id frame frameViews =
       let
         ( data, mod ) =
@@ -234,26 +250,18 @@ view model =
   in
   div [ class "container d-flex flex-column" ]
     [ div [ class "form-inline justify-content-between" ]
-        [ input [ class "form-control mr-2 fg-2", type_ "text", placeholder "URL" ] []
-        , input [ class "form-control mr-2 fg-1", type_ "text", placeholder "Topic" ] []
-        , div [ class "d-flex fw-150" ]
-            [ button [ class "btn btn-primary", type_ "button", onClick ConnectAndJoin ]
-                [ text "Connect & Join" ]
-            , button [ class "btn btn-primary dropdown-toggle dropdown-toggle-split", attribute "data-toggle" "dropdown", type_ "button" ]
-                []
-            , div [ class "dropdown-menu dropdown-menu-right" ]
-                [ a [ class "dropdown-item", href "#" ]
-                    [ text "Connect&Join" ]
-                ]
-            ]
+        [ input [ class ("form-control mr-2 fg-2 " ++ urlStateClass), type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
+        , input [ class "form-control mr-2 fg-1", type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
+        , button [ class ("btn fw-150 " ++ connectButtonClass), type_ "button", onClick connectButtonMsg, disabled (not connectButtonEnabled) ]
+            [ text connectButtonText ]
         ]
     , div [ class "row no-gutters mt-4" ]
         [ div [ class "col-12 d-flex flex-row" ]
             [ div [ class "input-group mr-2" ]
-                [ input [ class "form-control col-3", type_ "text", placeholder "Event" ] []
-                , input [ class "form-control col-9", type_ "text", placeholder "Message" ] []
+                [ input [ class "form-control col-3", type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
+                , input [ class "form-control col-9", type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
                 ]
-            , button [ class "btn btn-primary fw-150", type_ "button", onClick (Send "create" """{"project-item": {"name": "An item", "project-id": 3}}""") ] [ text "Send" ]
+            , button [ class "btn btn-primary fw-150", type_ "button", disabled (not sendButtonEnabled), onClick (Send model.event model.message) ] [ text "Send" ]
             ]
         ]
     , div [ class "row no-gutters mt-4" ]
@@ -277,9 +285,8 @@ view model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.batch
-    [ Phoenix.connected OnConnected
-    , Phoenix.joined OnJoined
-    , Phoenix.onMessage OnMessage
+    [ Phoenix.connections OnConnection
+    , Phoenix.messages OnMessage
     ]
 
 
@@ -299,4 +306,9 @@ validateUrl candidate =
     Ok candidate
 
   else
-    Err "URL must start with ws:// or ws://"
+    Err "URL must start with ws:// or wss://"
+
+
+isNotBlank : String -> Bool
+isNotBlank s =
+  String.length (String.trim s) > 0

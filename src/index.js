@@ -10,27 +10,31 @@ function app() {
     let channel;
     const root = document.createElement('div');
     const app = Main.embed(root);
-    app.ports.connect.subscribe(url => {
+    app.ports.connect.subscribe(([url, topic]) => {
         if (ws) {
             ws.disconnect();
         }
         ws = new Socket(url);
-        ws.onOpen(() => app.ports.connections.send(url));
+        ws.onOpen(() => {
+            channel = ws.channel(topic);
+            channel.onMessage = (event, payload) => {
+                app.ports.messages.send([event, payload || null]);
+                return payload;
+            };
+            channel.join()
+                .receive("ok", () => {
+                    app.ports.connections.send(null);
+                })
+                .receive("error", err => {
+                    app.ports.connections.send(err);
+                });
+        });
         ws.connect();
     });
-    app.ports.join.subscribe(topic => {
-        channel = ws.channel(topic);
-        channel.onMessage = (event, payload) => {
-            app.ports.messages.send([event, payload || null]);
-            return payload;
-        };
-        channel.join()
-            .receive("ok", () => {
-                app.ports.joins.send(topic);
-            })
-            .receive("error", () => {
-
-            });
+    app.ports.disconnect.subscribe(() => {
+        if (ws) {
+            ws.disconnect();
+        }
     });
     app.ports.send.subscribe(([event, payload]) => {
         let pushPayload;

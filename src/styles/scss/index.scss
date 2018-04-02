@@ -2,6 +2,8 @@
 @import "~bootstrap/scss/bootstrap";
 @import "bootswatch/cosmo/bootswatch";
 @import "bootstrap-overrides";
+@import "~octicons/build/build";
+@import "components";
 @import "utilities";
 
 body {

@@ -1,5 +1,5 @@
-.fixed-width {
-  width: 150px;
+.full-width {
+  width: 100%;
 }
 
 .fixed-height {
@@ -11,9 +11,21 @@
 }
 
 .fg-1 {
-  flex-grow: 1;
+  flex-grow: 1 !important;
 }
 
 .fg-2 {
-  flex-grow: 2;
+  flex-grow: 2 !important;
+}
+.fg-3 {
+  flex-grow: 3 !important;
+}
+.fg-4 {
+  flex-grow: 4 !important;
+}
+.fg-5 {
+  flex-grow: 5 !important;
+}
+.fg-6 {
+  flex-grow: 6 !important;
 }

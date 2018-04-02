@@ -26,7 +26,7 @@ function app() {
                     app.ports.connections.send(null);
                 })
                 .receive("error", err => {
-                    app.ports.connections.send(err);
+                    app.ports.connections.send(err.reason || 'unknown error');
                 });
         });
         ws.connect();

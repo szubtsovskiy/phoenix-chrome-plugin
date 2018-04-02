@@ -5,7 +5,7 @@ import Dict exposing (Dict)
 import Dom.Scroll as Scroll
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onInput, onWithOptions)
+import Html.Events exposing (onClick, onInput, onSubmit, onWithOptions)
 import Json.Decode
 import Json.Encode as Json
 import Octicons
@@ -190,7 +190,7 @@ update msg model =
 view : Model -> Html Msg
 view model =
   let
-    urlStateClass =
+    urlValidationState =
       Maybe.map (always "is-invalid") model.error
         |> Maybe.withDefault ""
 
@@ -249,19 +249,32 @@ view model =
       frameView :: frameViews
   in
   div [ class "container d-flex flex-column" ]
-    [ div [ class "form-inline justify-content-between" ]
-        [ input [ class ("form-control mr-2 fg-2 " ++ urlStateClass), type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
-        , input [ class "form-control mr-2 fg-1", type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
-        , button [ class ("btn fw-150 " ++ connectButtonClass), type_ "button", onClick connectButtonMsg, disabled (not connectButtonEnabled) ]
-            [ text connectButtonText ]
-        ]
-    , div [ class "row no-gutters mt-4" ]
-        [ div [ class "col-12 d-flex flex-row" ]
-            [ div [ class "input-group mr-2" ]
-                [ input [ class "form-control col-3", type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
-                , input [ class "form-control col-9", type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
+    [ Html.form [ onSubmit NoOp ]
+        [ div [ class "form-row" ]
+            [ div [ class "col-6 pr-2" ]
+                [ input [ class ("form-control " ++ urlValidationState), type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
+                , div [ class "invalid-feedback" ] [ text (Maybe.withDefault "" model.error) ]
                 ]
-            , button [ class "btn btn-primary fw-150", type_ "button", disabled (not sendButtonEnabled), onClick (Send model.event model.message) ] [ text "Send" ]
+            , div [ class "col-4 pr-2" ]
+                [ input [ class "form-control", type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
+                ]
+            , div [ class "col-2" ]
+                [ button [ class ("btn full-width " ++ connectButtonClass), type_ "submit", onClick connectButtonMsg, disabled (not connectButtonEnabled) ]
+                    [ text connectButtonText ]
+                ]
+            ]
+        ]
+    , Html.form [ onSubmit NoOp ]
+        [ div [ class "form-row mt-4" ]
+            [ div [ class "col-10" ]
+                [ div [ class "input-group mr-2" ]
+                    [ input [ class "form-control col-3", type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
+                    , input [ class "form-control col-9", type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
+                    ]
+                ]
+            , div [ class "col-2" ]
+                [ button [ class "btn btn-primary full-width", type_ "submit", disabled (not sendButtonEnabled), onClick (Send model.event model.message) ] [ text "Send" ]
+                ]
             ]
         ]
     , div [ class "row no-gutters mt-4" ]

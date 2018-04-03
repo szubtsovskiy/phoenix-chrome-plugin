@@ -6,9 +6,9 @@ import Dom.Scroll as Scroll
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput, onSubmit, onWithOptions)
+import Icons
 import Json.Decode
 import Json.Encode as Json
-import Octicons
 import Phoenix
 import Preview
 import Task
@@ -76,8 +76,8 @@ init =
   let
     model =
       { state = Disconnected
-      , url = ""
-      , topic = ""
+      , url = "ws://localhost:4000/ws"
+      , topic = "larder:1"
       , event = ""
       , message = ""
       , error = Nothing
@@ -210,17 +210,20 @@ view model =
 
     frameView id frame frameViews =
       let
-        ( data, mod ) =
+        jsonToString data =
+          if data == Json.null then
+            ""
+
+          else
+            Json.encode 0 data
+
+        ( data, mod, icon ) =
           case frame.message of
             In data ->
-              if data == Json.null then
-                ( "", "frame-in" )
-
-              else
-                ( Json.encode 0 data, "frame-in" )
+              ( jsonToString data, "frame-in", Icons.arrowDown )
 
             Out data ->
-              ( data, "frame-out" )
+              ( data, "frame-out", Icons.arrowUp )
 
         classes =
           [ ( "frame", True )
@@ -234,15 +237,15 @@ view model =
         frameView =
           div [ classList classes, onClick (ToggleFrameSelection id) ]
             [ div [ class "frame-event" ]
-                [ div [ class "frame-icon" ] []
+                [ div [ class "frame-icon" ] [ icon ]
                 , text frame.event
                 ]
             , div [ class "frame-data" ] [ text data ]
             , div [ class "frame-actions" ]
                 [ button [ class "btn btn-xs btn-secondary frame-repeat", type_ "button", title "Send again", onClickNoPropagation (Send frame.event data) ]
-                    []
+                    [ Icons.repeat ]
                 , button [ class "btn btn-xs btn-secondary frame-copy", type_ "button", title "Copy to clipboard", onClickNoPropagation (CopyToClipboard data) ]
-                    [ Octicons.clippy ]
+                    [ Icons.clippy ]
                 ]
             ]
       in

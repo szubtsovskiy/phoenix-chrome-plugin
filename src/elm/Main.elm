@@ -210,17 +210,25 @@ view model =
 
     frameView id frame frameViews =
       let
-        jsonToString data =
-          if data == Json.null then
-            ""
-
-          else
-            Json.encode 0 data
-
         ( data, mod, icon ) =
           case frame.message of
             In data ->
-              ( jsonToString data, "frame-in", Icons.arrowDown )
+              let
+                jsonToString data =
+                  if data == Json.null then
+                    ""
+
+                  else
+                    Json.encode 0 data
+
+                mod =
+                  if frame.event == "phx_error" then
+                    "frame-error"
+
+                  else
+                    "frame-in"
+              in
+              ( jsonToString data, mod, Icons.arrowDown )
 
             Out data ->
               ( data, "frame-out", Icons.arrowUp )

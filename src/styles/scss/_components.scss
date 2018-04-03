@@ -54,6 +54,13 @@
     }
   }
 
+  &.frame-error {
+    background: transparentize($red, 0.9);
+    .frame-icon {
+      color: $red;
+    }
+  }
+
   &.frame-selected {
     background: transparentize($blue, 0.6);
   }

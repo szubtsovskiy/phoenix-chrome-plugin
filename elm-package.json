@@ -1,11 +1,12 @@
 {
     "version": "1.0.0",
     "summary": "A plug-in for Chrome browser to test interaction via Phoenix channels",
-    "repository": "https://github.com/user/repo.git",
+    "repository": "https://github.com/szubtsovskiy/phoenix-chrome-plugin.git",
     "license": "MIT",
     "source-directories": [
         "src/elm"
     ],
+    "native-modules": true,
     "exposed-modules": [],
     "dependencies": {
         "NoRedInk/elm-decode-pipeline": "3.0.0 <= v < 4.0.0",

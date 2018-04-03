@@ -1,13 +1,14 @@
-import "./styles/scss/index.scss";
+import "./styles/index.scss";
 import {Main} from './elm/Main.elm';
 import {Socket} from "./vendor/phoenix";
 import JSONFormatter from 'json-formatter-js';
 import 'arrive';
-
+import AutoComplete from './vendor/auto-complete';
 
 function app() {
     let ws;
     let channel;
+    const history = {};
     const root = document.createElement('div');
     const app = Main.embed(root);
     app.ports.connect.subscribe(([url, topic]) => {
@@ -51,7 +52,7 @@ function app() {
     });
     app.ports.previews.subscribe(({containerID, data}) => {
         document.arrive(`#${containerID}`, {onlyOnce: true, existing: true}, container => {
-            const preview = (function() {
+            const preview = (function () {
                 if (data == null || (typeof data !== 'object' && typeof data !== 'string')) {
                     const preview = document.createElement('div');
                     preview.className = 'fully-centered';
@@ -85,6 +86,30 @@ function app() {
         document.execCommand('copy');
         document.body.removeChild(input);
 
+    });
+    app.ports.autoComplete.subscribe(id => {
+        document.arrive(`#${id}`, {onlyOnce: true, existing: true}, input => {
+            new AutoComplete({
+                selector: input,
+                minChars: 0,
+                cache: false,
+                source: function (term, suggest) {
+                    term = term.toLowerCase();
+                    const choices = history[input.id] || [];
+                    const matches = choices.filter(choice => ~choice.toLowerCase().indexOf(term));
+                    suggest(matches);
+                },
+                onSelect: (e, term) => {
+                    e.stopPropagation();
+                    const inputEvent = new Event('input');
+                    inputEvent.targetValue = term;
+                    input.dispatchEvent(inputEvent);
+                }
+            });
+        });
+    });
+    app.ports.choices.subscribe(([id, choices]) => {
+        history[id] = choices;
     });
     return root;
 }

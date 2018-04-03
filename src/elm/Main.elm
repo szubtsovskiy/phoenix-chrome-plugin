@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import AutoComplete
 import Clipboard
 import Dict exposing (Dict)
 import Dom.Scroll as Scroll
@@ -9,6 +10,7 @@ import Html.Events exposing (onClick, onInput, onSubmit, onWithOptions)
 import Icons
 import Json.Decode
 import Json.Encode as Json
+import LocalStorage
 import Phoenix
 import Preview
 import Task
@@ -52,6 +54,8 @@ type Msg
   | CopyToClipboard String
   | OnConnection (Maybe String)
   | OnMessage ( String, Json.Value )
+  | OnLoadHistory String (Result LocalStorage.Error (Maybe (List String)))
+  | OnUpdateHistory String (List String) (Result LocalStorage.Error ())
 
 
 type alias Model =
@@ -63,6 +67,7 @@ type alias Model =
   , error : Maybe String
   , frames : Dict Int Frame
   , nextFrameID : Int
+  , history : Dict String (List String)
   }
 
 
@@ -83,9 +88,25 @@ init =
       , error = Nothing
       , frames = Dict.empty
       , nextFrameID = 0
+      , history = Dict.empty
       }
+
+    initPreview =
+      Preview.show previewContainerID Json.null
+
+    loadHistory field =
+      let
+        historyDecoder =
+          Json.Decode.list Json.Decode.string
+      in
+      [ AutoComplete.init field
+      , Task.attempt (OnLoadHistory field) <| LocalStorage.getJson historyDecoder ("history." ++ field)
+      ]
+
+    commands =
+      initPreview :: List.concatMap loadHistory [ urlInputID, topicInputID, eventInputID, messageInputID ]
   in
-  model ! [ Preview.show previewContainerID Json.null ]
+  model ! commands
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -104,7 +125,14 @@ update msg model =
       case validateUrl model.url of
         Ok url ->
           if isNotBlank model.topic then
-            { model | state = Connecting, error = Nothing } ! [ Phoenix.connect ( url, model.topic ) ]
+            let
+              commands =
+                [ Phoenix.connect ( url, model.topic )
+                , updateHistory urlInputID url model.history
+                , updateHistory topicInputID model.topic model.history
+                ]
+            in
+            { model | state = Connecting, error = Nothing } ! commands
 
           else
             { model | error = Nothing } ! []
@@ -129,8 +157,14 @@ update msg model =
 
           newFrames =
             Dict.insert frameID (Frame event (Out message) False) model.frames
+
+          commands =
+            [ Phoenix.send ( event, message )
+            , updateHistory eventInputID event model.history
+            , updateHistory messageInputID message model.history
+            ]
         in
-        { model | frames = newFrames, nextFrameID = frameID + 1, event = "", message = "" } ! [ Phoenix.send ( event, message ) ]
+        { model | frames = newFrames, nextFrameID = frameID + 1, event = "", message = "" } ! commands
 
       else
         model ! []
@@ -185,6 +219,57 @@ update msg model =
 
       else
         model ! []
+
+    OnLoadHistory field result ->
+      onLoadHistory field result model
+
+    OnUpdateHistory field values result ->
+      case result of
+        Ok _ ->
+          { model | history = Dict.insert field values model.history } ! [ AutoComplete.choices ( field, values ) ]
+
+        Err err ->
+          let
+            _ =
+              Debug.log ("Error updating history for " ++ field) err
+          in
+          model ! []
+
+
+onLoadHistory : String -> Result LocalStorage.Error (Maybe (List String)) -> Model -> ( Model, Cmd Msg )
+onLoadHistory field result model =
+  case result of
+    Ok maybeHistory ->
+      case maybeHistory of
+        Just history ->
+          { model | history = Dict.insert field history model.history } ! [ AutoComplete.choices ( field, history ) ]
+
+        Nothing ->
+          model ! []
+
+    Err err ->
+      let
+        _ =
+          Debug.log ("Error loading history for " ++ field) err
+      in
+      model ! []
+
+
+updateHistory : String -> String -> Dict String (List String) -> Cmd Msg
+updateHistory field value history =
+  let
+    existingValues =
+      Dict.get field history
+        |> Maybe.withDefault []
+        |> List.filter ((/=) value)
+
+    newValues =
+      List.take 10 (value :: existingValues)
+
+    key =
+      "history." ++ field
+  in
+  Task.attempt (OnUpdateHistory field newValues) <| LocalStorage.setJson key (Json.list (List.map Json.string newValues))
 
 
 view : Model -> Html Msg
@@ -263,11 +348,11 @@ view model =
     [ Html.form [ onSubmit NoOp ]
         [ div [ class "form-row" ]
             [ div [ class "col-6 pr-2" ]
-                [ input [ class ("form-control " ++ urlValidationState), type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
+                [ input [ id urlInputID, class ("form-control " ++ urlValidationState), type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
                 , div [ class "invalid-feedback" ] [ text (Maybe.withDefault "" model.error) ]
                 ]
             , div [ class "col-4 pr-2" ]
-                [ input [ class "form-control", type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
+                [ input [ id topicInputID, class "form-control", type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
                 ]
             , div [ class "col-2" ]
                 [ button [ class ("btn full-width " ++ connectButtonClass), type_ "submit", onClick connectButtonMsg, disabled (not connectButtonEnabled) ]
@@ -279,8 +364,8 @@ view model =
         [ div [ class "form-row mt-4" ]
             [ div [ class "col-10" ]
                 [ div [ class "input-group mr-2" ]
-                    [ input [ class "form-control col-3", type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
-                    , input [ class "form-control col-9", type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
+                    [ input [ id eventInputID, class "form-control col-3", type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
+                    , input [ id messageInputID, class "form-control col-9", type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
                     ]
                 ]
             , div [ class "col-2" ]
@@ -312,6 +397,26 @@ subscriptions model =
     [ Phoenix.connections OnConnection
     , Phoenix.messages OnMessage
     ]
+
+
+urlInputID : String
+urlInputID =
+  "url"
+
+
+topicInputID : String
+topicInputID =
+  "topic"
+
+
+eventInputID : String
+eventInputID =
+  "event"
+
+
+messageInputID : String
+messageInputID =
+  "message"
 
 
 framesContainerID : String

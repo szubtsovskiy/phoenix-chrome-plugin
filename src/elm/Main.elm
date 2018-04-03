@@ -76,8 +76,8 @@ init =
   let
     model =
       { state = Disconnected
-      , url = "ws://localhost:4000/ws"
-      , topic = "larder:1"
+      , url = ""
+      , topic = ""
       , event = ""
       , message = ""
       , error = Nothing
@@ -130,7 +130,7 @@ update msg model =
           newFrames =
             Dict.insert frameID (Frame event (Out message) False) model.frames
         in
-        { model | frames = newFrames, nextFrameID = frameID + 1 } ! [ Phoenix.send ( event, message ) ]
+        { model | frames = newFrames, nextFrameID = frameID + 1, event = "", message = "" } ! [ Phoenix.send ( event, message ) ]
 
       else
         model ! []

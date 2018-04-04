@@ -348,7 +348,7 @@ view model =
     [ Html.form [ onSubmit NoOp ]
         [ div [ class "form-row" ]
             [ div [ class "col-5 pr-2" ]
-                [ input [ id urlInputID, class ("form-control " ++ urlValidationState), tabindex 1, type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
+                [ input [ id urlInputID, class ("form-control " ++ urlValidationState), tabindex 1, autofocus True, type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
                 , div [ class "invalid-feedback" ] [ text (Maybe.withDefault "" model.error) ]
                 ]
             , div [ class "col-5 pr-2" ]

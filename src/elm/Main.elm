@@ -48,6 +48,7 @@ type Msg
   | ChangeEvent String
   | ChangeMessage String
   | Connect
+  | CancelConnecting
   | Disconnect
   | Send String String
   | ToggleFrameSelection Int
@@ -139,6 +140,9 @@ update msg model =
 
         Err err ->
           { model | state = Disconnected, error = Just err } ! []
+
+    CancelConnecting ->
+      { model | state = Disconnected } ! []
 
     Disconnect ->
       { model | state = Disconnected } ! [ Phoenix.disconnect () ]
@@ -285,7 +289,7 @@ view model =
           ( "btn-primary", "Connect & Join", Connect, isNotBlank model.url && isNotBlank model.topic )
 
         Connecting ->
-          ( "btn-primary", "Connect & Join", NoOp, False )
+          ( "btn-secondary", "Cancel", CancelConnecting, True )
 
         Connected ->
           ( "btn-warning", "Leave & Disconnect", Disconnect, True )

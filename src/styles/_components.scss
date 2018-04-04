@@ -1,9 +1,6 @@
-$fa-font-path: "~font-awesome/fonts";
-
 @import "~bootstrap/scss/utilities/spacing";
 @import "~bootstrap/scss/utilities/flex";
 @import "~bootstrap/scss/mixins/buttons";
-@import "~font-awesome/scss/font-awesome";
 
 .btn-xs {
   display: inline-flex;
@@ -40,8 +37,9 @@ $fa-font-path: "~font-awesome/fonts";
       top: 0;
       bottom: 0;
       z-index: $zindex-dropdown;
-      .frame-repeat {
-        @extend .fa, .fa-repeat;
+      .octicon {
+        display: inline-flex;
+        margin: auto 0;
       }
     }
     .frame-data {
@@ -52,14 +50,14 @@ $fa-font-path: "~font-awesome/fonts";
   &.frame-in {
     background: transparentize($green, 0.9);
     .frame-icon {
-      @extend .fa, .fa-arrow-circle-down, .fa-fw;
       color: $green;
     }
   }
 
-  &.frame-out {
+  &.frame-error {
+    background: transparentize($red, 0.9);
     .frame-icon {
-      @extend .fa, .fa-arrow-circle-up, .fa-fw;
+      color: $red;
     }
   }
 
@@ -68,12 +66,15 @@ $fa-font-path: "~font-awesome/fonts";
   }
 
   .frame-icon {
-    @extend .mx-1;
-    margin: auto 0;
+    @extend .mx-1, .d-flex;
+    .fa-icon {
+      display: inline-flex;
+      margin: auto 0;
+    }
   }
 
   .frame-event {
-    @extend .pr-2;
+    @extend .pr-2, .d-flex, .flex-row;
     width: 150px;
     border-right: 1px $gray-200 solid;
     overflow: auto;

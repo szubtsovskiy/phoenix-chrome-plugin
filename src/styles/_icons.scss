@@ -1,0 +1,11 @@
+@import "~octicons/build/build.css";
+
+$icon-size-base: $font-size-base;
+
+svg.fa-icon {
+  display: inline-block;
+  vertical-align: text-top;
+  fill: currentColor;
+  width: $icon-size-base;
+  height: $icon-size-base;
+}

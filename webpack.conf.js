@@ -2,7 +2,6 @@ const webpack = require('webpack');
 const path = require('path');
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
 const LiveReloadPlugin = require('webpack-livereload-plugin');
 const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
 const OptimizeCssAssetsPlugin = require('optimize-css-assets-webpack-plugin');
@@ -35,21 +34,13 @@ const common = {
                 test: /\.elm$/,
                 exclude: [/elm-stuff/, /node_modules/],
                 loader: 'elm-webpack-loader'
-            },
-            {
-                test: /\.(eot|ttf|woff|woff2|svg)(\?.+)?$/,
-                loader: 'file-loader?name=fonts/[name]-[hash].[ext]'
             }
-
         ]
     },
     plugins: [
         new HtmlWebpackPlugin({
             title: 'Phoenix Chrome plug-in'
-        }),
-        new CopyWebpackPlugin([
-            {from: 'node_modules/font-awesome/fonts/', to: 'fonts/'}
-        ])
+        })
     ]
 };
 

@@ -1,14 +1,16 @@
 module Main exposing (main)
 
+import AutoComplete
 import Clipboard
 import Dict exposing (Dict)
 import Dom.Scroll as Scroll
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput, onSubmit, onWithOptions)
+import Icons
 import Json.Decode
 import Json.Encode as Json
-import Octicons
+import LocalStorage
 import Phoenix
 import Preview
 import Task
@@ -46,12 +48,15 @@ type Msg
   | ChangeEvent String
   | ChangeMessage String
   | Connect
+  | CancelConnecting
   | Disconnect
   | Send String String
   | ToggleFrameSelection Int
   | CopyToClipboard String
   | OnConnection (Maybe String)
   | OnMessage ( String, Json.Value )
+  | OnLoadHistory String (Result LocalStorage.Error (Maybe (List String)))
+  | OnUpdateHistory String (List String) (Result LocalStorage.Error ())
 
 
 type alias Model =
@@ -63,6 +68,7 @@ type alias Model =
   , error : Maybe String
   , frames : Dict Int Frame
   , nextFrameID : Int
+  , history : Dict String (List String)
   }
 
 
@@ -83,9 +89,25 @@ init =
       , error = Nothing
       , frames = Dict.empty
       , nextFrameID = 0
+      , history = Dict.empty
       }
+
+    initPreview =
+      Preview.show previewContainerID Json.null
+
+    loadHistory field =
+      let
+        historyDecoder =
+          Json.Decode.list Json.Decode.string
+      in
+      [ AutoComplete.init field
+      , Task.attempt (OnLoadHistory field) <| LocalStorage.getJson historyDecoder ("history." ++ field)
+      ]
+
+    commands =
+      initPreview :: List.concatMap loadHistory [ urlInputID, topicInputID, eventInputID, messageInputID ]
   in
-  model ! [ Preview.show previewContainerID Json.null ]
+  model ! commands
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -104,13 +126,23 @@ update msg model =
       case validateUrl model.url of
         Ok url ->
           if isNotBlank model.topic then
-            { model | state = Connecting, error = Nothing } ! [ Phoenix.connect ( url, model.topic ) ]
+            let
+              commands =
+                [ Phoenix.connect ( url, model.topic )
+                , updateHistory urlInputID url model.history
+                , updateHistory topicInputID model.topic model.history
+                ]
+            in
+            { model | state = Connecting, error = Nothing } ! commands
 
           else
             { model | error = Nothing } ! []
 
         Err err ->
           { model | state = Disconnected, error = Just err } ! []
+
+    CancelConnecting ->
+      { model | state = Disconnected } ! []
 
     Disconnect ->
       { model | state = Disconnected } ! [ Phoenix.disconnect () ]
@@ -129,8 +161,14 @@ update msg model =
 
           newFrames =
             Dict.insert frameID (Frame event (Out message) False) model.frames
+
+          commands =
+            [ Phoenix.send ( event, message )
+            , updateHistory eventInputID event model.history
+            , updateHistory messageInputID message model.history
+            ]
         in
-        { model | frames = newFrames, nextFrameID = frameID + 1 } ! [ Phoenix.send ( event, message ) ]
+        { model | frames = newFrames, nextFrameID = frameID + 1, event = "", message = "" } ! commands
 
       else
         model ! []
@@ -186,6 +224,52 @@ update msg model =
       else
         model ! []
 
+    OnLoadHistory field result ->
+      case result of
+        Ok maybeHistory ->
+          case maybeHistory of
+            Just history ->
+              { model | history = Dict.insert field history model.history } ! [ AutoComplete.choices ( field, history ) ]
+
+            Nothing ->
+              model ! []
+
+        Err err ->
+          let
+            _ =
+              Debug.log ("Error loading history for " ++ field) err
+          in
+          model ! []
+
+    OnUpdateHistory field values result ->
+      case result of
+        Ok _ ->
+          { model | history = Dict.insert field values model.history } ! [ AutoComplete.choices ( field, values ) ]
+
+        Err err ->
+          let
+            _ =
+              Debug.log ("Error updating history for " ++ field) err
+          in
+          model ! []
+
+
+updateHistory : String -> String -> Dict String (List String) -> Cmd Msg
+updateHistory field value history =
+  let
+    existingValues =
+      Dict.get field history
+        |> Maybe.withDefault []
+        |> List.filter ((/=) value)
+
+    newValues =
+      List.take 10 (value :: existingValues)
+
+    key =
+      "history." ++ field
+  in
+  Task.attempt (OnUpdateHistory field newValues) <| LocalStorage.setJson key (Json.list (List.map Json.string newValues))
+
 
 view : Model -> Html Msg
 view model =
@@ -200,7 +284,7 @@ view model =
           ( "btn-primary", "Connect & Join", Connect, isNotBlank model.url && isNotBlank model.topic )
 
         Connecting ->
-          ( "btn-primary", "Connect & Join", NoOp, False )
+          ( "btn-secondary", "Cancel", CancelConnecting, True )
 
         Connected ->
           ( "btn-warning", "Leave & Disconnect", Disconnect, True )
@@ -210,17 +294,28 @@ view model =
 
     frameView id frame frameViews =
       let
-        ( data, mod ) =
+        ( data, mod, icon ) =
           case frame.message of
             In data ->
-              if data == Json.null then
-                ( "", "frame-in" )
+              let
+                jsonToString data =
+                  if data == Json.null then
+                    ""
 
-              else
-                ( Json.encode 0 data, "frame-in" )
+                  else
+                    Json.encode 0 data
+
+                mod =
+                  if frame.event == "phx_error" then
+                    "frame-error"
+
+                  else
+                    "frame-in"
+              in
+              ( jsonToString data, mod, Icons.arrowDown )
 
             Out data ->
-              ( data, "frame-out" )
+              ( data, "frame-out", Icons.arrowUp )
 
         classes =
           [ ( "frame", True )
@@ -234,15 +329,15 @@ view model =
         frameView =
           div [ classList classes, onClick (ToggleFrameSelection id) ]
             [ div [ class "frame-event" ]
-                [ div [ class "frame-icon" ] []
+                [ div [ class "frame-icon" ] [ icon ]
                 , text frame.event
                 ]
             , div [ class "frame-data" ] [ text data ]
             , div [ class "frame-actions" ]
                 [ button [ class "btn btn-xs btn-secondary frame-repeat", type_ "button", title "Send again", onClickNoPropagation (Send frame.event data) ]
-                    []
+                    [ Icons.repeat ]
                 , button [ class "btn btn-xs btn-secondary frame-copy", type_ "button", title "Copy to clipboard", onClickNoPropagation (CopyToClipboard data) ]
-                    [ Octicons.clippy ]
+                    [ Icons.clippy ]
                 ]
             ]
       in
@@ -251,29 +346,29 @@ view model =
   div [ class "container d-flex flex-column" ]
     [ Html.form [ onSubmit NoOp ]
         [ div [ class "form-row" ]
-            [ div [ class "col-6 pr-2" ]
-                [ input [ class ("form-control " ++ urlValidationState), type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
+            [ div [ class "col-5 pr-2" ]
+                [ input [ id urlInputID, class ("form-control " ++ urlValidationState), tabindex 1, autofocus True, type_ "text", placeholder "URL", value model.url, title (Maybe.withDefault "" model.error), readonly (model.state /= Disconnected), onInput ChangeUrl ] []
                 , div [ class "invalid-feedback" ] [ text (Maybe.withDefault "" model.error) ]
                 ]
-            , div [ class "col-4 pr-2" ]
-                [ input [ class "form-control", type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
+            , div [ class "col-5 pr-2" ]
+                [ input [ id topicInputID, class "form-control", tabindex 2, type_ "text", placeholder "Topic", value model.topic, readonly (model.state /= Disconnected), onInput ChangeTopic ] []
                 ]
             , div [ class "col-2" ]
-                [ button [ class ("btn full-width " ++ connectButtonClass), type_ "submit", onClick connectButtonMsg, disabled (not connectButtonEnabled) ]
+                [ button [ class ("btn full-width " ++ connectButtonClass), tabindex 0, type_ "submit", onClick connectButtonMsg, disabled (not connectButtonEnabled) ]
                     [ text connectButtonText ]
                 ]
             ]
         ]
     , Html.form [ onSubmit NoOp ]
         [ div [ class "form-row mt-4" ]
-            [ div [ class "col-10" ]
-                [ div [ class "input-group mr-2" ]
-                    [ input [ class "form-control col-3", type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
-                    , input [ class "form-control col-9", type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
-                    ]
+            [ div [ class "col-5 pr-2" ]
+                [ input [ id eventInputID, class "form-control", tabindex 3, type_ "text", placeholder "Event", value model.event, readonly (model.state /= Connected), onInput ChangeEvent ] []
+                ]
+            , div [ class "col-5 pr-2" ]
+                [ input [ id messageInputID, class "form-control", tabindex 4, type_ "text", placeholder "Message", value model.message, readonly (model.state /= Connected), onInput ChangeMessage ] []
                 ]
             , div [ class "col-2" ]
-                [ button [ class "btn btn-primary full-width", type_ "submit", disabled (not sendButtonEnabled), onClick (Send model.event model.message) ] [ text "Send" ]
+                [ button [ class "btn btn-primary full-width", tabindex 0, type_ "submit", disabled (not sendButtonEnabled), onClick (Send model.event model.message) ] [ text "Send" ]
                 ]
             ]
         ]
@@ -301,6 +396,26 @@ subscriptions model =
     [ Phoenix.connections OnConnection
     , Phoenix.messages OnMessage
     ]
+
+
+urlInputID : String
+urlInputID =
+  "url"
+
+
+topicInputID : String
+topicInputID =
+  "topic"
+
+
+eventInputID : String
+eventInputID =
+  "event"
+
+
+messageInputID : String
+messageInputID =
+  "message"
 
 
 framesContainerID : String

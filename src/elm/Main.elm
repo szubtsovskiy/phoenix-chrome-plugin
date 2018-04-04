@@ -225,7 +225,21 @@ update msg model =
         model ! []
 
     OnLoadHistory field result ->
-      onLoadHistory field result model
+      case result of
+        Ok maybeHistory ->
+          case maybeHistory of
+            Just history ->
+              { model | history = Dict.insert field history model.history } ! [ AutoComplete.choices ( field, history ) ]
+
+            Nothing ->
+              model ! []
+
+        Err err ->
+          let
+            _ =
+              Debug.log ("Error loading history for " ++ field) err
+          in
+          model ! []
 
     OnUpdateHistory field values result ->
       case result of
@@ -238,25 +252,6 @@ update msg model =
               Debug.log ("Error updating history for " ++ field) err
           in
           model ! []
-
-
-onLoadHistory : String -> Result LocalStorage.Error (Maybe (List String)) -> Model -> ( Model, Cmd Msg )
-onLoadHistory field result model =
-  case result of
-    Ok maybeHistory ->
-      case maybeHistory of
-        Just history ->
-          { model | history = Dict.insert field history model.history } ! [ AutoComplete.choices ( field, history ) ]
-
-        Nothing ->
-          model ! []
-
-    Err err ->
-      let
-        _ =
-          Debug.log ("Error loading history for " ++ field) err
-      in
-      model ! []
 
 
 updateHistory : String -> String -> Dict String (List String) -> Cmd Msg

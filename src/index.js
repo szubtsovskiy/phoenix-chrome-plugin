@@ -1,9 +1,9 @@
 import "./styles/index.scss";
 import {Main} from './elm/Main.elm';
-import {Socket} from "./vendor/phoenix";
+import {Socket} from "./javascript/vendor/phoenix";
 import JSONFormatter from 'json-formatter-js';
 import 'arrive';
-import AutoComplete from './vendor/auto-complete';
+import AutoComplete from './javascript/vendor/auto-complete';
 
 function app() {
     let ws;

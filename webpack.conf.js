@@ -2,6 +2,7 @@ const webpack = require('webpack');
 const path = require('path');
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const LiveReloadPlugin = require('webpack-livereload-plugin');
 const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
 const OptimizeCssAssetsPlugin = require('optimize-css-assets-webpack-plugin');
@@ -40,7 +41,10 @@ const common = {
     plugins: [
         new HtmlWebpackPlugin({
             title: 'Phoenix Chrome plug-in'
-        })
+        }),
+        new CopyWebpackPlugin([
+            {from: 'chrome-ext/'}
+        ])
     ]
 };
 
@@ -49,7 +53,7 @@ const common = {
  */
 const dev = {
     output: {
-        path: path.resolve(__dirname, 'dist'),
+        path: path.resolve(__dirname, 'build/dev'),
         filename: '[name].js'
     },
     module: {
@@ -74,7 +78,7 @@ const dev = {
  */
 const prod = {
     output: {
-        path: path.resolve(__dirname, 'dist'),
+        path: path.resolve(__dirname, 'build/chrome-ext'),
         filename: '[hash].js'
     },
     module: {

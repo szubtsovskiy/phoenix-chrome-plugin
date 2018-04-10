@@ -10,9 +10,10 @@
   },
   "private": true,
   "scripts": {
-    "postinstall": "elm package install -y",
+    "postinstall": "node_modules/elm/binwrappers/elm-package install -y",
     "start": "webpack --config webpack.conf.js --watch --mode development",
-    "dist": "rimraf build/chrome-ext && webpack --config webpack.conf.js --mode production"
+    "dist": "rimraf build/chrome-ext && webpack --config webpack.conf.js --mode production",
+    "test": "echo \"Nothing to test\""
   },
   "devDependencies": {
     "babel-core": "^6.26.0",

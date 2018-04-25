@@ -93,4 +93,5 @@
 .message-preview {
   @extend .px-2, .py-1, .d-flex;
   overflow: auto;
+  white-space: nowrap;
 }
